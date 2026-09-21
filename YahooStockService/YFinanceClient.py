@@ -1,4 +1,3 @@
-import requests
 import yfinance as yf
 
  
@@ -10,6 +9,43 @@ class YFinanceClient:
         # api_key not needed for yfinance
 
         self.api_key = api_key
+
+    @staticmethod
+    def normalize_symbol(symbol):
+        return (symbol or "").strip().upper()
+
+    def validate_symbol(self, symbol):
+        """Validate a ticker symbol against Yahoo Finance metadata and history."""
+        normalized_symbol = self.normalize_symbol(symbol)
+        if not normalized_symbol:
+            return {
+                "is_valid": False,
+                "normalized_symbol": normalized_symbol,
+                "message": "Ticker symbol is empty."
+            }
+
+        try:
+            ticker = yf.Ticker(normalized_symbol)
+            info = ticker.info or {}
+            history = ticker.history(period="1d")
+
+            has_info = bool(info.get("symbol") or info.get("shortName") or info.get("longName"))
+            has_history = history is not None and not history.empty
+            is_valid = has_info or has_history
+
+            return {
+                "is_valid": is_valid,
+                "normalized_symbol": normalized_symbol,
+                "message": "Symbol validated by Yahoo Finance." if is_valid else "Symbol not found in Yahoo Finance.",
+                "info": info
+            }
+        except Exception as e:
+            return {
+                "is_valid": False,
+                "normalized_symbol": normalized_symbol,
+                "message": f"Yahoo validation failed: {e}",
+                "info": {}
+            }
 
  
 
@@ -256,3 +292,16 @@ class YFinanceClient:
             print(f"Error searching symbol: {e}")
 
             return []
+
+    def get_fundamentals_snapshot(self, symbol, cash_flow_limit=5):
+        """Return a consolidated fundamentals payload for valuation workflows."""
+        normalized_symbol = self.normalize_symbol(symbol)
+        info = self.get_info(normalized_symbol)
+        return {
+            "symbol": normalized_symbol,
+            "info": info,
+            "earnings_per_share": self.get_earnings_per_share(normalized_symbol),
+            "book_value_per_share": self.get_book_value_per_share(normalized_symbol),
+            "dividend": self.get_latest_dividend(normalized_symbol),
+            "cash_flows": self.get_cash_flows_list(normalized_symbol, limit=cash_flow_limit)
+        }

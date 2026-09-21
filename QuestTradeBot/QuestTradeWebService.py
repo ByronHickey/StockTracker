@@ -1,4 +1,6 @@
 
+import json
+import time
 from flask import Flask, redirect, request, jsonify
 import requests
 
@@ -11,6 +13,15 @@ REDIRECT_URI = 'http://localhost:5000/callback'
 
 AUTH_URL = 'https://login.questrade.com/oauth2/authorize'
 TOKEN_URL = 'https://login.questrade.com/oauth2/token'
+TOKEN_FILE = 'questrade_tokens.json'
+
+
+def save_tokens(token_payload):
+    """Save token payload with computed expiry for refresh workflow."""
+    token_payload['expires_at'] = time.time() + token_payload.get('expires_in', 1800)
+    with open(TOKEN_FILE, 'w') as f:
+        json.dump(token_payload, f, indent=4)
+    print(f"Tokens saved to {TOKEN_FILE}")
 
 @app.route('/login')
 def login():
@@ -45,11 +56,10 @@ def callback():
         return f"Error exchanging token: {response.text}", response.status_code
         
     token_payload = response.json()
+    save_tokens(token_payload)
     return jsonify({
-        "message": "Authentication successful!",
-        "api_server": token_payload.get("api_server"),
-        "access_token": token_payload.get("access_token"),
-        "refresh_token": token_payload.get("refresh_token")
+        "status": "Success! You can now run your companion script safely.",
+        "api_server": token_payload.get("api_server")
     })
 
 if __name__ == '__main__':
